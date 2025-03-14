@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import CsvTable from '../components/Table.svelte';
 	import {
 		Button,
 		FileUploader,
@@ -33,12 +34,22 @@
 		getRecentDocuments
 	} from '$lib';
 
-	let pdfFile: string | Blob | null = null;
+	let pdfFile: any;
 	let pdfFileName: string | Blob = '';
 	let pdfBase64: string = '';
 	let loading = false;
+	let csvData: string = '';
+	let mappingExplanation: string = '';
 	let summary = '';
-	let chartData: { data: { group: any; value: any; }[]; options: { title: any; height: string; axes: { left: { mapsTo: string; }; bottom: { mapsTo: string; scaleType: string; }; }; color: { scale: { Data: string; }; }; }; } | null = null;
+	let chartData: {
+		data: { group: any; value: any }[];
+		options: {
+			title: any;
+			height: string;
+			axes: { left: { mapsTo: string }; bottom: { mapsTo: string; scaleType: string } };
+			color: { scale: { Data: string } };
+		};
+	} | null = null;
 	let question = '';
 	let answer = '';
 
@@ -95,6 +106,9 @@
 			if (existingDoc) {
 				summary = existingDoc.summary;
 				chartData = prepareChartData(existingDoc.chartData);
+				if (existingDoc.csvData) {
+					csvData = existingDoc.csvData;
+				}
 				console.log('Using cached document data');
 			} else {
 				// Send the pdf to the server for processing
@@ -109,10 +123,14 @@
 
 				const data = await response.json();
 				summary = data.summary;
+				if (data.csvData) {
+					csvData = data.csvData;
+					mappingExplanation = data.mappingExplanation;
+				}
 				chartData = prepareChartData(data.chartData);
 
 				// Save the document data
-				await saveDocument(pdfFile.name, pdfBase64, summary, data.chartData);
+				await saveDocument(pdfFile.name, pdfBase64, summary, data.chartData, data.csvData);
 			}
 		} catch (error: any) {
 			console.error('Error processing PDF:', error);
@@ -151,7 +169,7 @@
 	}
 
 	async function askQuestion() {
-		if (!pdfFile || !question) return;
+		if (!question) return;
 
 		loading = true;
 
@@ -197,9 +215,16 @@
 	function handleFileChange(e: CustomEvent) {
 		const files = e.detail;
 		if (files && files.length > 0) {
+			let count = 0;
+			// for(const file of files) {
+			// 	pdfFile[count] = file;
+			// 	count++;
+			// 	console.log(file);
+			// }
 			pdfFile = files[0];
 			pdfBase64 = ''; // Reset base64 when file changes
 		}
+		loading = false
 	}
 
 	async function handleClearHistory() {
@@ -220,7 +245,11 @@
 		totalQuestions = recentQuestions.length;
 	}
 
-	async function useHistoryQuestion(historyItem: { id: string, question: string; filename: string | Blob }) {
+	async function useHistoryQuestion(historyItem: {
+		id: string;
+		question: string;
+		filename: string | Blob;
+	}) {
 		question = historyItem.question;
 		activeHistoryItem = historyItem;
 
@@ -276,7 +305,7 @@
 	{#if loading}
 		<Loading active />
 	{/if}
-	<Header company="Nibble" platformName="Aero: PDF Analyzer">
+	<Header company="ÄI" platformName="Aero: PDF Analyzer">
 		<div slot="skip-to-content">
 			<SkipToContent />
 		</div>
@@ -340,7 +369,9 @@
 								labelTitle="Upload a PDF file"
 								buttonLabel="Choose file"
 								labelDescription="Max file size: 10MB"
+								status={!loading ? 'completed' : 'uploading'}
 								accept={['.pdf']}
+								multiple
 								on:change={handleFileChange}
 								class="mb-4"
 							/>
@@ -356,7 +387,7 @@
 							<Tile class="summary-tile">
 								<h2>Document Summary</h2>
 								<div class="summary-content">
-									{summary}
+									{summary.replace('* **', '\n')}
 								</div>
 							</Tile>
 						</Column>
@@ -372,6 +403,22 @@
 								{/if}
 							</Tile>
 						</Column>
+						{#if csvData}
+							<Column lg={16} md={8} sm={4}>
+								<Tile class="csv-tile">
+									<h2>Extracted Data</h2>
+									{#if mappingExplanation}
+										<details class="mapping-explanation">
+											<summary>Data Extraction Details</summary>
+											<p>{mappingExplanation}</p>
+										</details>
+									{/if}
+									<div class="csv-table-container">
+										<CsvTable {csvData} />
+									</div>
+								</Tile>
+							</Column>
+						{/if}
 					</Row>
 				{/if}
 
@@ -383,11 +430,10 @@
 								labelText="Your Question"
 								placeholder="Enter your question about the document..."
 								bind:value={question}
-								disabled={!pdfFile}
 							/>
 							<Button
 								on:click={askQuestion}
-								disabled={!pdfFile || !question}
+								disabled={!question}
 								kind="tertiary"
 								class="mt-4"
 							>
@@ -407,3 +453,27 @@
 		</div>
 	</Content>
 </div>
+
+<style>
+	.csv-tile {
+		margin-top: 1rem;
+		padding: 1rem;
+	}
+
+	.mapping-explanation {
+		margin: 1rem 0;
+		padding: 1rem;
+		background-color: var(--cds-layer-01);
+		border-radius: 4px;
+	}
+
+	.mapping-explanation summary {
+		cursor: pointer;
+		color: var(--cds-text-primary);
+		margin-bottom: 0.5rem;
+	}
+
+	.csv-table-container {
+		margin-top: 1rem;
+	}
+</style>

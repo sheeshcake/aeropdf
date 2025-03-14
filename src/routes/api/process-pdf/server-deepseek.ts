@@ -1,21 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { json } from '@sveltejs/kit';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_KEY } from '$env/static/private';
+import axios from 'axios';
+import { DEEPSEEK_KEY } from '$env/static/private';
 
 export async function POST({ request }) {
 	try {
 		const formData = await request.formData();
 		const pdfBase64 = formData.get('base64');
 		const pdfFile = formData.get('pdf');
-		const mode = formData.get('mode') || 'both';
+		const mode = formData.get('mode') || 'both'; // New parameter to determine processing mode: 'summary', 'csv', or 'both'
 
 		if (!pdfFile || !(pdfFile instanceof File)) {
 			return json({ error: 'No PDF file provided' }, { status: 400 });
 		}
 
-		const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-		const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const axios = require('axios');
+        const url = 'https://api.deepseek.ai/v1/analyze/pdf';
 
 		let result;
 		const response: {
@@ -25,7 +25,9 @@ export async function POST({ request }) {
 			csvData?: string;
 		} = {};
 
+		// Generate content based on mode
 		if (mode === 'summary' || mode === 'both') {
+			// Original prompt for summary and chart data
 			const summaryPrompt = `
 			Analyze the following PDF content and provide:
 			
@@ -71,13 +73,17 @@ export async function POST({ request }) {
 
 			if (chartDataMatch && chartDataMatch[1]) {
 				try {
+					// Find JSON object in the text
 					let jsonStr = chartDataMatch[1].trim();
+
+					// Remove code fence backticks and language identifier if present
 					jsonStr = jsonStr.replace(/```json|```/g, '').trim();
 
 					chartData = JSON.parse(jsonStr);
 				} catch (error) {
 					console.log(chartDataMatch[1].trim());
 					console.error('Error parsing chart data:', error);
+					// Fallback data if parsing fails
 					chartData = {
 						title: 'Document Metrics',
 						labels: ['Metric 1', 'Metric 2', 'Metric 3', 'Metric 4', 'Metric 5'],
@@ -125,11 +131,16 @@ export async function POST({ request }) {
 			const csvPrompt = `
 					Analyze the PDF content and extract all the data that can be transformed into a structured CSV format based on these columns:
 					- Status
+					- Amendment Id
 					- Effective From
+					- Effective To
 					- Group Account
 					- Group Lane
 					- Origin City
+					- Origin State Prov
 					- Origin Country
+					- Destination City
+					- Destination State Prov
 					- Destination Country
 					- Zone
 					- Weight Range From
@@ -137,9 +148,15 @@ export async function POST({ request }) {
 					- Bill Terms
 					- Package Type
 					- Service Name
+					- Service Code
 					- Service Scope
+					- Residential or Commercial Indicator
+					- Consol Shipments
+					- Tier
+					- Miscellaneous Qualifier
+					- Rate
 					- Currency
-					- Rate Per Kg/Lbs
+					- Rate Basis
 
 
 					Apply the following transformations:
@@ -150,11 +167,11 @@ export async function POST({ request }) {
 					5. Standardize state/province codes to their official abbreviations
 					6. Ensure weight ranges are numerical values
 					7. Categorize services into "Express", "Standard", or "Economy" based on the Service Name
-					9. Add a new column "Rate Per Kg/Lbs" by dividing Rate by the maximum Weight Range
+					8. Add a new column "Transit Days" calculated based on Service Type and Zone
+					9. Add a new column "Rate Per Kg" by dividing Rate by the maximum Weight Range
 					10. Group lanes into "Domestic", "Cross-Border", or "International" based on origin and destination countries
 
 
-					
 					Format your response as follows:
 					
 					EXTRACTION_MAPPING:

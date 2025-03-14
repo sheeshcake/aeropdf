@@ -16,6 +16,7 @@ interface Document {
     base64: string;
     summary: string;
     chartData: any;
+    csvData?: string;
     timestamp: string;
 }
 
@@ -71,7 +72,7 @@ export async function clearQuestionHistory() {
 }
 
 // New functions for document storage
-export async function saveDocument(filename: string, base64: string, summary: string, chartData: any) {
+export async function saveDocument(filename: string, base64: string, summary: string, chartData: any, csvData: string) {
     try {
         // Check if document with the same filename exists
         const existingDoc = await db.documents
@@ -85,6 +86,7 @@ export async function saveDocument(filename: string, base64: string, summary: st
                 base64,
                 summary,
                 chartData,
+                csvData,
                 timestamp: new Date().toISOString()
             });
             return existingDoc.id;
@@ -95,6 +97,7 @@ export async function saveDocument(filename: string, base64: string, summary: st
                 base64,
                 summary,
                 chartData,
+                csvData,
                 timestamp: new Date().toISOString()
             });
             return id;
